@@ -3,9 +3,393 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Document</title>
+    <title>Premium QR Code Studio</title>
+    
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/interactjs/dist/interact.min.js"></script>
+
+    <style>
+        /* === Premium Variables & Reset === */
+        :root {
+            --primary: #4f46e5;
+            --secondary: #06b6d4;
+            --accent: #8b5cf6;
+            --bg-color: #0f172a;
+            --glass-bg: rgba(255, 255, 255, 0.05);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --text-main: #ffffff;
+            --text-muted: #cbd5e1;
+            --transition: all 0.3s ease;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', system-ui, sans-serif; }
+        
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* === Animated Background === */
+        .bg-mesh {
+            position: fixed; top: -50%; left: -50%; width: 200%; height: 200%;
+            background: radial-gradient(circle at 50% 50%, rgba(79,70,229,0.15), rgba(6,182,212,0.1) 40%, transparent 60%);
+            animation: rotate 30s linear infinite; z-index: -1;
+        }
+        @keyframes rotate { 100% { transform: rotate(360deg); } }
+
+        /* === Typography & Utilities === */
+        h1 { font-size: 2.5rem; background: linear-gradient(135deg, #fff, #a5b4fc); -webkit-background-clip: text; color: transparent; margin-bottom: 0.5rem; }
+        p { color: var(--text-muted); font-size: 1rem; margin-bottom: 2rem; }
+        .glass { background: var(--glass-bg); backdrop-filter: blur(16px); border: 1px solid var(--glass-border); border-radius: 16px; box-shadow: 0 8px 32px rgba(0,0,0,0.3); }
+        .hidden { display: none !important; }
+
+        /* === Layout === */
+        .container { max-width: 1400px; margin: 0 auto; padding: 2rem; display: grid; grid-template-columns: 400px 1fr; gap: 2rem; }
+        @media (max-width: 1024px) { .container { grid-template-columns: 1fr; } }
+        
+        /* === Controls Section (Left) === */
+        .controls { padding: 1.5rem; max-height: 90vh; overflow-y: auto; }
+        
+        /* Tabs */
+        .tabs { display: flex; gap: 0.5rem; background: rgba(0,0,0,0.3); padding: 0.5rem; border-radius: 12px; margin-bottom: 1.5rem; }
+        .tab-btn { flex: 1; padding: 0.75rem; border: none; background: none; color: var(--text-muted); cursor: pointer; border-radius: 8px; font-weight: 600; transition: var(--transition); }
+        .tab-btn.active { background: var(--glass-bg); color: var(--text-main); }
+        
+        /* Forms */
+        .form-group { margin-bottom: 1rem; }
+        label { display: block; font-size: 0.85rem; color: var(--text-muted); margin-bottom: 0.5rem; }
+        input[type="text"], input[type="url"], input[type="tel"], input[type="email"], textarea {
+            width: 100%; padding: 0.85rem; background: rgba(0,0,0,0.2); border: 1px solid var(--glass-border);
+            border-radius: 8px; color: var(--text-main); outline: none; transition: var(--transition);
+        }
+        input:focus, textarea:focus { border-color: var(--primary); }
+        .color-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        input[type="color"] { width: 100%; height: 40px; border: none; border-radius: 8px; cursor: pointer; background: transparent; }
+        
+        /* File Upload */
+        .file-upload { display: flex; align-items: center; justify-content: center; padding: 1.5rem; border: 2px dashed var(--glass-border); border-radius: 12px; cursor: pointer; text-align: center; color: var(--text-muted); transition: var(--transition); margin-bottom: 1.5rem; }
+        .file-upload:hover { border-color: var(--secondary); color: var(--secondary); }
+        .file-upload input { display: none; }
+
+        /* === Preview Section (Right) === */
+        .preview-area { display: flex; flex-direction: column; gap: 1.5rem; }
+        .canvas-container { flex: 1; padding: 1rem; display: flex; align-items: center; justify-content: center; background: rgba(0,0,0,0.4); border-radius: 16px; position: relative; overflow: hidden; min-height: 500px; }
+        
+        /* Composition Wrapper */
+        #composition-wrapper { position: relative; max-width: 100%; max-height: 70vh; display: inline-block; box-shadow: 0 10px 40px rgba(0,0,0,0.5); }
+        #bg-image { max-width: 100%; max-height: 70vh; display: block; border-radius: 8px; pointer-events: none; }
+        
+        /* QR Overlay */
+        #qr-overlay { 
+            position: absolute; top: 20px; left: 20px; width: 150px; height: 150px; 
+            background: white; padding: 10px; border-radius: 8px; box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+            touch-action: none; user-select: none; box-sizing: border-box; cursor: move; display: flex; justify-content: center; align-items: center;
+        }
+        #qr-overlay.hidden { display: none !important; }
+        #qr-overlay img, #qr-overlay canvas { width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+        
+        /* Resize handle for interact.js */
+        .resize-handle { position: absolute; right: -5px; bottom: -5px; width: 15px; height: 15px; background: var(--secondary); border-radius: 50%; cursor: se-resize; }
+
+        /* Buttons */
+        .action-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+        button { padding: 1rem; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 0.5rem; transition: var(--transition); }
+        .btn-primary { background: linear-gradient(135deg, var(--primary), var(--accent)); color: white; }
+        .btn-secondary { background: var(--glass-bg); border: 1px solid var(--glass-border); color: white; }
+        button:hover { filter: brightness(1.1); transform: translateY(-2px); }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.2); border-radius: 10px; }
+    </style>
 </head>
 <body>
-    
+    <div class="bg-mesh"></div>
+
+    <div class="container">
+        <aside class="controls glass">
+            <h1>QR Studio</h1>
+            <p>Design & Overlay Premium Codes</p>
+
+            <div class="tabs">
+                <button class="tab-btn active" onclick="switchTab('url')">URL Link</button>
+                <button class="tab-btn" onclick="switchTab('vcard')">vCard Details</button>
+            </div>
+
+            <div id="mode-url" class="mode-section">
+                <div class="form-group">
+                    <label>Destination URL</label>
+                    <input type="url" id="val-url" placeholder="https://example.com" oninput="generateCode()">
+                </div>
+            </div>
+
+            <div id="mode-vcard" class="mode-section hidden">
+                <div class="form-group"><label>Full Name</label><input type="text" id="val-name" placeholder="John Doe" oninput="generateCode()"></div>
+                <div class="form-group"><label>Company</label><input type="text" id="val-company" placeholder="Acme Corp" oninput="generateCode()"></div>
+                <div class="form-group"><label>Job Title</label><input type="text" id="val-title" placeholder="CEO" oninput="generateCode()"></div>
+                <div class="form-group"><label>Phone</label><input type="tel" id="val-phone" placeholder="+1 234 567 890" oninput="generateCode()"></div>
+                <div class="form-group"><label>Email</label><input type="email" id="val-email" placeholder="john@example.com" oninput="generateCode()"></div>
+                <div class="form-group"><label>Website</label><input type="url" id="val-website" placeholder="https://example.com" oninput="generateCode()"></div>
+                <div class="form-group"><label>Address</label><input type="text" id="val-address" placeholder="123 Main St, NY" oninput="generateCode()"></div>
+            </div>
+
+            <hr style="border-color: var(--glass-border); margin: 1.5rem 0;">
+
+            <div class="form-group color-grid">
+                <div>
+                    <label>QR Dot Color</label>
+                    <input type="color" id="val-colorDark" value="#000000" onchange="generateCode()">
+                </div>
+                <div>
+                    <label>QR Background</label>
+                    <input type="color" id="val-colorLight" value="#ffffff" onchange="generateCode()">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>QR Overlay Opacity</label>
+                <input type="range" id="val-opacity" min="0.2" max="1" step="0.1" value="1" style="width:100%" oninput="updateOpacity()">
+            </div>
+
+            <hr style="border-color: var(--glass-border); margin: 1.5rem 0;">
+
+            <label class="file-upload">
+                <input type="file" id="file-upload" accept="image/png, image/jpeg, image/jpg">
+                <div>
+                    <i class="fa-solid fa-cloud-arrow-up fa-2x"></i>
+                    <p style="margin: 0.5rem 0 0 0;">Upload Background Image</p>
+                </div>
+            </label>
+        </aside>
+
+        <main class="preview-area">
+            <div class="canvas-container glass">
+                <div id="composition-wrapper">
+                    <img id="bg-image" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='600' height='400' fill='%231e293b'%3E%3Crect width='100%25' height='100%25'/%3E%3Ctext x='50%25' y='50%25' font-size='20' fill='%2364748b' font-family='sans-serif' text-anchor='middle'%3ENo Background Image Uploaded%3C/text%3E%3C/svg%3E" alt="Background">
+                    
+                    <div id="qr-overlay" data-x="0" data-y="0">
+                        <div id="qrcode"></div>
+                        <div class="resize-handle"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="action-row">
+                <button class="btn-primary" onclick="exportComposition('png')">
+                    <i class="fa-solid fa-download"></i> Export PNG (HD)
+                </button>
+                <button class="btn-secondary" onclick="exportComposition('jpeg')">
+                    Export JPG
+                </button>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        let qrCodeInstance = null;
+        let currentMode = 'url';
+
+        // 1. UI Tab Switching
+        function switchTab(mode) {
+            currentMode = mode;
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            event.target.classList.add('active');
+            
+            document.querySelectorAll('.mode-section').forEach(sec => sec.classList.add('hidden'));
+            document.getElementById(`mode-${mode}`).classList.remove('hidden');
+            generateCode();
+        }
+
+        // 2. Data Gathering & QR Generation
+        function generateCode() {
+            let qrText = "https://example.com";
+            
+            if (currentMode === 'url') {
+                const url = document.getElementById('val-url').value;
+                if (url) qrText = url;
+            } else {
+                // Construct vCard 3.0
+                const name = document.getElementById('val-name').value || "Name";
+                const org = document.getElementById('val-company').value;
+                const title = document.getElementById('val-title').value;
+                const phone = document.getElementById('val-phone').value;
+                const email = document.getElementById('val-email').value;
+                const website = document.getElementById('val-website').value;
+                const address = document.getElementById('val-address').value;
+
+                let vcard = `BEGIN:VCARD\nVERSION:3.0\nN:${name}\nFN:${name}\n`;
+                if(org) vcard += `ORG:${org}\n`;
+                if(title) vcard += `TITLE:${title}\n`;
+                if(phone) vcard += `TEL;TYPE=WORK,VOICE:${phone}\n`;
+                if(email) vcard += `EMAIL;TYPE=PREF,INTERNET:${email}\n`;
+                if(website) vcard += `URL:${website}\n`;
+                if(address) vcard += `ADR;TYPE=WORK:;;${address};;;;\n`;
+                vcard += `END:VCARD`;
+                qrText = vcard;
+            }
+
+            const cDark = document.getElementById('val-colorDark').value;
+            const cLight = document.getElementById('val-colorLight').value;
+            
+            // Apply background color to the overlay box
+            document.getElementById('qr-overlay').style.backgroundColor = cLight;
+
+            // Clear and Generate new QR
+            document.getElementById('qrcode').innerHTML = "";
+            qrCodeInstance = new QRCode(document.getElementById('qrcode'), {
+                text: qrText,
+                width: 256,
+                height: 256,
+                colorDark: cDark,
+                colorLight: cLight,
+                correctLevel: QRCode.CorrectLevel.H
+            });
+        }
+
+        // 3. Opacity Control
+        function updateOpacity() {
+            const opacity = document.getElementById('val-opacity').value;
+            document.getElementById('qr-overlay').style.opacity = opacity;
+        }
+
+        // 4. Image Upload Logic
+        document.getElementById('file-upload').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                const bgImage = document.getElementById('bg-image');
+                bgImage.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+
+        // 5. Drag and Resize Logic (using interact.js)
+        interact('#qr-overlay')
+            .draggable({
+                inertia: true,
+                modifiers: [
+                    interact.modifiers.restrictRect({
+                        restriction: 'parent',
+                        endOnly: true
+                    })
+                ],
+                autoScroll: true,
+                listeners: {
+                    move: dragMoveListener
+                }
+            })
+            .resizable({
+                edges: { left: false, right: '.resize-handle', bottom: '.resize-handle', top: false },
+                modifiers: [
+                    interact.modifiers.restrictEdges({ outer: 'parent' }),
+                    interact.modifiers.restrictSize({ min: { width: 50, height: 50 } }),
+                    interact.modifiers.aspectRatio({ ratio: 'preserve' }) // Keep QR square
+                ],
+                listeners: {
+                    move: function (event) {
+                        let { x, y } = event.target.dataset;
+                        x = (parseFloat(x) || 0) + event.deltaRect.left;
+                        y = (parseFloat(y) || 0) + event.deltaRect.top;
+
+                        Object.assign(event.target.style, {
+                            width: `${event.rect.width}px`,
+                            height: `${event.rect.height}px`,
+                            transform: `translate(${x}px, ${y}px)`
+                        });
+
+                        Object.assign(event.target.dataset, { x, y });
+                    }
+                }
+            });
+
+        function dragMoveListener(event) {
+            const target = event.target;
+            const x = (parseFloat(target.getAttribute('data-x')) || 0) + event.dx;
+            const y = (parseFloat(target.getAttribute('data-y')) || 0) + event.dy;
+
+            target.style.transform = `translate(${x}px, ${y}px)`;
+            target.setAttribute('data-x', x);
+            target.setAttribute('data-y', y);
+        }
+
+        // 6. Canvas Composition & Export Logic
+        function exportComposition(format) {
+            const bgImg = document.getElementById('bg-image');
+            const qrOverlay = document.getElementById('qr-overlay');
+            const qrCanvasElement = document.querySelector('#qrcode canvas'); // qrcode.js generates a canvas internally
+            
+            if (!qrCanvasElement) {
+                alert("QR Code not ready yet.");
+                return;
+            }
+
+            // Create offscreen high-res canvas
+            const canvas = document.createElement('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            // Get Natural dimensions vs Rendered dimensions
+            const naturalW = bgImg.naturalWidth;
+            const naturalH = bgImg.naturalHeight;
+            const renderW = bgImg.getBoundingClientRect().width;
+            const renderH = bgImg.getBoundingClientRect().height;
+            
+            // Setup canvas size
+            canvas.width = naturalW;
+            canvas.height = naturalH;
+            
+            // 1. Draw Background Image
+            ctx.drawImage(bgImg, 0, 0, naturalW, naturalH);
+            
+            // 2. Calculate Scale Factor for the overlay
+            const scaleX = naturalW / renderW;
+            const scaleY = naturalH / renderH;
+            
+            // Get current CSS transforms and dimensions of the QR overlay container
+            const overlayX = (parseFloat(qrOverlay.getAttribute('data-x')) || 0);
+            const overlayY = (parseFloat(qrOverlay.getAttribute('data-y')) || 0);
+            const overlayW = qrOverlay.offsetWidth;
+            const overlayH = qrOverlay.offsetHeight;
+            
+            // Scale properties up to the original image resolution
+            const finalX = (qrOverlay.offsetLeft + overlayX) * scaleX;
+            const finalY = (qrOverlay.offsetTop + overlayY) * scaleY;
+            const finalW = overlayW * scaleX;
+            const finalH = overlayH * scaleY;
+            
+            // Set Alpha (Opacity)
+            ctx.globalAlpha = parseFloat(document.getElementById('val-opacity').value);
+            
+            // 3. Draw Background color block for QR code padding (border radius roughly handled)
+            ctx.fillStyle = document.getElementById('val-colorLight').value;
+            // Native HTML5 Canvas rounding
+            ctx.beginPath();
+            ctx.roundRect(finalX, finalY, finalW, finalH, 10 * scaleX);
+            ctx.fill();
+            
+            // 4. Draw actual QR Code inside the block
+            // Give it the same 10px padding conceptually applied in CSS
+            const padding = 10 * scaleX;
+            ctx.drawImage(qrCanvasElement, finalX + padding, finalY + padding, finalW - (padding*2), finalH - (padding*2));
+            
+            // Reset Alpha
+            ctx.globalAlpha = 1.0;
+
+            // Trigger Download
+            const link = document.createElement('a');
+            link.download = `Premium_QR_Composition.${format}`;
+            link.href = canvas.toDataURL(`image/${format}`, 1.0);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // Initialize First QR
+        window.onload = generateCode;
+    </script>
 </body>
 </html>
